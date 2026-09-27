@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 from app.api.v1.dependencies import get_node_service, get_inference_provider
 from app.domain.services.structured_extraction_service import StructuredExtractionService
@@ -10,10 +10,10 @@ router = APIRouter()
 
 class ChatQuery(BaseModel):
     text: str
-    client_msg_id: Optional[str] = None
+    client_msg_id: Optional[str] = Field(None, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
     history: Optional[list] = []
     provider: Optional[str] = None
-    session_id: Optional[str] = None
+    session_id: Optional[str] = Field(None, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
     document_id: Optional[str] = None
 
 class ChatResponse(BaseModel):
