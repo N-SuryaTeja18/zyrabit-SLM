@@ -30,7 +30,11 @@ class NodeService:
         source = self.source_store.persist(filename, Path(staged_path))
         existing = self.metadata.source_by_hash(source.sha256)
         if existing:
-            return {"status": "ready", "deduplicated": True, "source_id": existing["id"], "document_id": self._existing_document(existing["id"])}
+            return {
+                "status": "already_indexed",
+                "message": f"Document already indexed as {existing['filename']}",
+                "document_id": self._existing_document(existing["id"]),
+            }
         self.metadata.create_source(source)
         document_id, job_id = str(uuid.uuid4()), str(uuid.uuid4())
         self.metadata.create_document(document_id, source.id, type(self.parser).__name__)

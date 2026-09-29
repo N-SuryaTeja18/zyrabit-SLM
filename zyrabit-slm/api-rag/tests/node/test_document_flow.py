@@ -1,6 +1,7 @@
 """Integration checks for the real, authorized Zyrabit CIO review document."""
 from __future__ import annotations
 
+import hashlib
 import asyncio
 from pathlib import Path
 
@@ -46,6 +47,62 @@ class CapturingInference(OfflineInference):
 def test_ingestion_etl_normalizes_extractor_artifacts():
     dirty = "\ufeffTítulo\u00a0con\u200b ruido\u00ad\n\n\nTexto\x00 final"
     assert LocalDocumentParser._clean_text(dirty) == "Título con ruido\n\nTexto final"
+
+
+@pytest.mark.asyncio
+async def test_new_upload_stores_sha256(tmp_path: Path):
+    content = b"same document content"
+
+    first_file = tmp_path / "report.pdf"
+    first_file.write_bytes(content)
+
+    service = NodeService(
+        SQLiteNodeStore(str(tmp_path / "node.db")),
+        LocalSourceStore(str(tmp_path / "sources")),
+        LocalDocumentParser(),
+        OfflineInference(),
+        vector_index=InMemoryVectorIndex(),
+    )
+
+    accepted = await service.import_file(first_file.name, str(first_file))
+
+    assert accepted["status"] == "queued"
+
+    source = service.metadata.source_for_document(accepted["document_id"])
+
+    expected_hash = hashlib.sha256(content).hexdigest()
+
+    assert source["sha256"] == expected_hash
+
+
+@pytest.mark.asyncio
+async def test_identical_content_with_different_filename_is_deduplicated(tmp_path: Path):
+    content = b"same document content"
+
+    first_file = tmp_path / "report.pdf"
+    second_file = tmp_path / "report_copy.pdf"
+
+    first_file.write_bytes(content)
+    second_file.write_bytes(content)
+
+    service = NodeService(
+        SQLiteNodeStore(str(tmp_path / "node.db")),
+        LocalSourceStore(str(tmp_path / "sources")),
+        LocalDocumentParser(),
+        OfflineInference(),
+        vector_index=InMemoryVectorIndex(),
+    )
+
+    first = await service.import_file(first_file.name, str(first_file))
+
+    second = await service.import_file(second_file.name, str(second_file))
+
+    assert second["status"] == "already_indexed"
+    assert second["message"] == "Document already indexed as report.pdf"
+    assert second["document_id"] == first["document_id"]
+
+    documents = service.documents()
+    assert len(documents) == 1
 
 
 @pytest.mark.asyncio
